@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Printer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #ffffff;
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+      outline: none;
+    }
+
+    #game-img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: fill;
+    }
+
+    /* The text input overlay — positioned over the dashes */
+    #text-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    #char-display {
+      position: absolute;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 18px;
+      color: #111;
+      letter-spacing: 18px;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    /* Hidden real input to capture keystrokes */
+    #hidden-input {
+      position: absolute;
+      opacity: 0;
+      width: 1px;
+      height: 1px;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container" tabindex="0">
+  <img id="game-img" src="printer01.png" alt="Printer puzzle" />
+  <div id="text-overlay">
+    <div id="char-display"></div>
+  </div>
+  <input id="hidden-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+</div>
+
+<script>
+  // ─── Native image dimensions ─────────────────────────────────────────────────
+  const NATIVE_W = 650;
+  const NATIVE_H = 370;
+
+  // Positions are in native px (relative to 650x370).
+  // topPct / leftPct are computed as fractions.
+  // The text is rendered ABOVE the dashes: we subtract fontSize from top so the
+  // baseline of the text sits just above the dash line.
+  //
+  // Dash top positions (native px, approximate centre of dash stroke):
+  //   printer01: dashes at ~y=97,  left edge ~x=18
+  //   printer02: dashes at ~y=97,  left edge ~x=18
+  //   printer03: dashes at ~y=80,  left edge ~x=18
+  //   printer04: dashes at ~y=80,  left edge ~x=18
+  //
+  // We place text so its BOTTOM sits ~6px above the dash top.
+
+  const pages = [
+    {
+      img: 'printer01.png',
+      maxChars: 3,
+      // top = dash_y - fontSize_native - 6  → placed by render() dynamically
+      dashY: 97,   // native px
+      leftPct: 18 / NATIVE_W,
+      letterSpacingNative: 30,
+      fontSizeNative: 24,
+      check: (s) => s.toLowerCase() === 'ink',
+      inputActive: true,
+    },
+    {
+      img: 'printer02.png',
+      maxChars: 1,
+      dashY: 97,
+      leftPct: 18 / NATIVE_W,
+      letterSpacingNative: 30,
+      fontSizeNative: 24,
+      check: (s) => s === '2',
+      inputActive: true,
+    },
+    {
+      img: 'printer03.png',
+      maxChars: 5,
+      dashY: 80,
+      leftPct: 18 / NATIVE_W,
+      letterSpacingNative: 24,
+      fontSizeNative: 24,
+      check: (s) => s.toLowerCase() === 'seven',
+      inputActive: true,
+    },
+    {
+      img: 'printer04.png',
+      maxChars: 6,
+      dashY: 80,
+      leftPct: 18 / NATIVE_W,
+      letterSpacingNative: 20,
+      fontSizeNative: 24,
+      check: (s) => s === '158247',
+      inputActive: true,
+    },
+    {
+      img: 'printer05.png',
+      maxChars: 0,
+      dashY: 0,
+      leftPct: 0,
+      letterSpacingNative: 0,
+      fontSizeNative: 0,
+      check: () => false,
+      inputActive: false,
+    },
+  ];
+
+  // ─── State ───────────────────────────────────────────────────────────────────
+  let currentPage = 0;
+  let typedChars = [];
+
+  // ─── DOM refs ────────────────────────────────────────────────────────────────
+  const gameImg      = document.getElementById('game-img');
+  const charDisplay  = document.getElementById('char-display');
+  const hiddenInput  = document.getElementById('hidden-input');
+  const container    = document.getElementById('game-container');
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
+  function render() {
+    const page = pages[currentPage];
+
+    // Update image
+    gameImg.src = page.img;
+
+    // Update char display
+    if (page.inputActive) {
+      const scaleX = window.innerWidth  / NATIVE_W;
+      const scaleY = window.innerHeight / NATIVE_H;
+
+      const fontSize      = page.fontSizeNative * scaleY;
+      const letterSpacing = page.letterSpacingNative * scaleX;
+      // Position bottom of text ~6 native px above the dash stroke
+      const topPx  = (page.dashY - page.fontSizeNative - 6) * scaleY;
+      const leftPx = page.leftPct * window.innerWidth;
+
+      charDisplay.style.top           = topPx + 'px';
+      charDisplay.style.left          = leftPx + 'px';
+      charDisplay.style.fontSize      = fontSize + 'px';
+      charDisplay.style.letterSpacing = letterSpacing + 'px';
+      charDisplay.style.display       = 'block';
+      charDisplay.textContent         = typedChars.join('');
+    } else {
+      charDisplay.style.display = 'none';
+    }
+  }
+
+  // Re-render on resize so text stays aligned
+  window.addEventListener('resize', render);
+
+  // ─── Advance to next page ────────────────────────────────────────────────────
+  function advancePage() {
+    typedChars = [];
+    currentPage++;
+    render();
+    // Re-focus so keyboard still works
+    container.focus();
+  }
+
+  // ─── Keydown handler ─────────────────────────────────────────────────────────
+  container.addEventListener('keydown', (e) => {
+    const page = pages[currentPage];
+    if (!page.inputActive) return;
+
+    // Prevent browser shortcuts messing things up for printable keys
+    if (e.key.length === 1) e.preventDefault();
+
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      if (typedChars.length > 0) {
+        typedChars.pop();
+        render();
+      }
+      return;
+    }
+
+    // Only accept printable single characters
+    if (e.key.length !== 1) return;
+
+    // Don't exceed max chars
+    if (typedChars.length >= page.maxChars) return;
+
+    typedChars.push(e.key);
+    render();
+
+    // Check code after each keystroke (once we have enough chars OR always)
+    const currentStr = typedChars.join('');
+
+    // Check immediately on each keystroke
+    if (page.check(currentStr)) {
+      // Brief flash-blank then advance
+      setTimeout(() => {
+        advancePage();
+      }, 80);
+    }
+  });
+
+  // ─── Click to focus ──────────────────────────────────────────────────────────
+  container.addEventListener('click', () => {
+    container.focus();
+  });
+
+  // ─── Init ────────────────────────────────────────────────────────────────────
+  container.focus();
+  render();
+</script>
+
+</body>
+</html>
