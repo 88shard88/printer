@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Printer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #ffffff;
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+      outline: none;
+    }
+
+    #game-img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: fill;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    /* The text input overlay — positioned over the dashes */
+    #text-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .char-slot {
+      position: absolute;
+      font-family: 'Courier New', Courier, monospace;
+      color: #111;
+      pointer-events: none;
+      white-space: pre;
+      transform: translateX(-50%);
+      line-height: 1;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container" tabindex="0">
+  <img id="game-img" src="printer01.png" alt="Printer puzzle" />
+  <div id="text-overlay"></div>
+</div>
+
+<script>
+  // ─── Native image size ────────────────────────────────────────────────────────
+  const NATIVE_W = 650;
+  const NATIVE_H = 370;
+
+  // ─── Page definitions ────────────────────────────────────────────────────────
+  // dashXs: native-px X centre of each dash (character slots), left to right
+  // dashY:  native-px Y of the TOP of the dash stroke
+  // Characters are rendered centred above each dash.
+  // fontSizeNative: font size at native resolution (scaled up at larger sizes)
+  const pages = [
+    {
+      img: 'printer01.png',
+      // 3 dashes spaced across top-left
+      dashXs: [47, 133, 213],
+      dashY: 97,
+      fontSizeNative: 26,
+      check: (s) => s.toLowerCase() === 'ink',
+      inputActive: true,
+    },
+    {
+      img: 'printer02.png',
+      // 1 dash
+      dashXs: [47],
+      dashY: 97,
+      fontSizeNative: 26,
+      check: (s) => s === '2',
+      inputActive: true,
+    },
+    {
+      img: 'printer03.png',
+      // 4 dashes (but "seven" = 5 chars — use 5 evenly spaced slots matching dashes)
+      dashXs: [25, 68, 111, 154, 197],
+      dashY: 80,
+      fontSizeNative: 26,
+      check: (s) => s.toLowerCase() === 'seven',
+      inputActive: true,
+    },
+    {
+      img: 'printer04.png',
+      // 6 dashes for "158247"
+      dashXs: [25, 68, 111, 154, 197, 240],
+      dashY: 80,
+      fontSizeNative: 26,
+      check: (s) => s === '158247',
+      inputActive: true,
+    },
+    {
+      img: 'printer05.png',
+      dashXs: [],
+      dashY: 0,
+      fontSizeNative: 0,
+      check: () => false,
+      inputActive: false,
+    },
+  ];
+
+  // ─── State ───────────────────────────────────────────────────────────────────
+  let currentPage = 0;
+  let typedChars  = [];
+
+  // ─── DOM refs ────────────────────────────────────────────────────────────────
+  const gameImg   = document.getElementById('game-img');
+  const overlay   = document.getElementById('text-overlay');
+  const container = document.getElementById('game-container');
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
+  function render() {
+    const page = pages[currentPage];
+    gameImg.src = page.img;
+
+    // Clear previous char slots
+    overlay.innerHTML = '';
+
+    if (!page.inputActive || page.dashXs.length === 0) return;
+
+    const scaleX   = window.innerWidth  / NATIVE_W;
+    const scaleY   = window.innerHeight / NATIVE_H;
+    const fontSize = page.fontSizeNative * Math.min(scaleX, scaleY);
+
+    // Place each typed character above its corresponding dash
+    typedChars.forEach((ch, i) => {
+      if (i >= page.dashXs.length) return;
+
+      const slot = document.createElement('span');
+      slot.className   = 'char-slot';
+      slot.textContent = ch;
+      slot.style.fontSize = fontSize + 'px';
+
+      // Centre of dash in screen px
+      const cx = page.dashXs[i] * scaleX;
+      // Position so the BOTTOM of the text sits ~4 native px above the dash top
+      const bottomY = (page.dashY - 4) * scaleY;
+      const topY    = bottomY - fontSize;
+
+      slot.style.left = cx + 'px';
+      slot.style.top  = topY + 'px';
+
+      overlay.appendChild(slot);
+    });
+  }
+
+  window.addEventListener('resize', render);
+
+  // ─── Advance page ────────────────────────────────────────────────────────────
+  function advancePage() {
+    typedChars  = [];
+    currentPage++;
+    render();
+    container.focus();
+  }
+
+  // ─── Keydown handler ─────────────────────────────────────────────────────────
+  container.addEventListener('keydown', (e) => {
+    const page = pages[currentPage];
+    if (!page.inputActive) return;
+
+    if (e.key.length === 1) e.preventDefault();
+
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault();
+      if (typedChars.length > 0) { typedChars.pop(); render(); }
+      return;
+    }
+
+    if (e.key.length !== 1) return;
+    if (typedChars.length >= page.dashXs.length) return;
+
+    typedChars.push(e.key);
+    render();
+
+    if (page.check(typedChars.join(''))) {
+      setTimeout(advancePage, 80);
+    }
+  });
+
+  container.addEventListener('click', () => container.focus());
+
+  container.focus();
+  render();
+</script>
+
+</body>
+</html>
